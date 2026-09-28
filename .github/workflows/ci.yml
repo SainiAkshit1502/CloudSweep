@@ -23,6 +23,6 @@ jobs:
       - name: Format
         run: ruff format --check .
       - name: Tests
-        run: pytest --cov=scanner --cov-report=term-missing
+        run: python -m pytest --cov=scanner --cov-report=term-missing
       - name: Docker image
         run: docker build -t cloudsweep .
