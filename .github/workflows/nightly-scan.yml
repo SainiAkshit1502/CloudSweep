@@ -1,0 +1,56 @@
+name: nightly-scan
+
+on:
+  schedule:
+    - cron: "0 2 * * *"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: pip
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+      - name: Configure AWS credentials (read-only scanner user)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ap-south-1
+      - name: Run CloudSweep
+        run: python -m scanner.cli --output report.json --fail-on none
+      - name: Upload report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: cloudsweep-report
+          path: report.json
+      - name: Open issue when findings exist
+        if: always()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json, os, subprocess, pathlib
+          path = pathlib.Path("report.json")
+          if not path.exists():
+              raise SystemExit(0)
+          data = json.loads(path.read_text())
+          total = data.get("summary", {}).get("total_findings", 0)
+          if not total:
+              raise SystemExit(0)
+          savings = data.get("summary", {}).get("total_est_monthly_savings_usd", 0)
+          body = f"Nightly CloudSweep found {total} issue(s). Estimated monthly savings ${savings}."
+          subprocess.check_call(
+              ["gh", "issue", "create", "--title", f"CloudSweep: {total} findings", "--body", body]
+          )
+          PY

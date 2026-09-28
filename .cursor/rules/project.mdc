@@ -1,0 +1,14 @@
+---
+description: CloudSweep project conventions
+alwaysApply: true
+---
+- Project spec is in docs/PROJECT_SPEC.md. Follow it. If something is ambiguous, ask before inventing behaviour.
+- Python 3.12, type hints everywhere, docstrings on public functions, ruff-clean code (line length 100).
+- The scanner must ONLY call read-only AWS APIs (Describe*, List*, Get*). Never add code that modifies or deletes AWS resources outside sandbox/.
+- Code in sandbox/ may only delete resources tagged sandbox=cloudsweep and must call assert_safe_account() first.
+- Never hardcode or log AWS credentials. Never commit .env or report.json.
+- Use boto3 paginators where available.
+- Rules are pure functions: (session, region) -> list[Finding].
+- All tests use moto's mock_aws. No test may call real AWS.
+- Keep code simple and readable; the author must be able to explain every line in an interview. No clever abstractions, no extra dependencies beyond requirements files.
+- Build only the phase requested in the prompt. Do not implement later phases.
