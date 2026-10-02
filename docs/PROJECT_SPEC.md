@@ -512,11 +512,11 @@ Practice the 2-minute walkthrough (Section 17) and the questions in Section 18 o
 
 ## 16. Definition of done
 
-- [ ] Four rules implemented, each tested for positive, negative and empty cases
+- [x] Four rules implemented, each tested for positive, negative and empty cases
 - [ ] `create_waste` then scan gives 5 findings; `destroy_waste` then scan gives 0
 - [ ] Scanner uses the read-only IAM user and never calls a write API
 - [ ] Sandbox refuses to run against the wrong account and deletes only tagged resources
-- [ ] CLI exit codes and JSON report work
+- [x] CLI exit codes and JSON report work
 - [ ] API endpoints and dashboard work; Docker image runs with runtime credentials
 - [ ] CI green; nightly scan uploads an artifact
 - [ ] Docs written and consistent with the code; screenshots in README
