@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import threading
+from datetime import datetime
 from pathlib import Path
 from typing import Annotated
 
@@ -22,6 +23,21 @@ from scanner.runner import run_scan
 
 app = FastAPI(title="CloudSweep", description="Scan AWS for wasted spend and risky firewall rules.")
 templates = Jinja2Templates(directory=str(Path(__file__).parent / "templates"))
+
+
+def format_datetime(value: datetime | str | None) -> str:
+    """Format a datetime or ISO string as 'YYYY-MM-DD HH:MM UTC'."""
+    if not value:
+        return ""
+    if isinstance(value, str):
+        try:
+            value = datetime.fromisoformat(value)
+        except ValueError:
+            return value
+    return value.strftime("%Y-%m-%d %H:%M UTC")
+
+
+templates.env.filters["format_datetime"] = format_datetime
 
 _lock = threading.Lock()
 _latest: ScanResult | None = None
