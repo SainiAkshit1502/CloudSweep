@@ -1,3 +1,8 @@
+# Required repository secrets:
+#   AWS_ACCESS_KEY_ID - Access key ID for the read-only scanner user
+#   AWS_SECRET_ACCESS_KEY - Secret access key for the read-only scanner user
+# (Do NOT configure sandbox credentials here; scanner identity must be read-only)
+
 name: nightly-scan
 
 on:
@@ -27,6 +32,7 @@ jobs:
           aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           aws-region: ap-south-1
       - name: Run CloudSweep
+        continue-on-error: true
         run: python -m scanner.cli --output report.json --fail-on none
       - name: Upload report
         if: always()
@@ -34,6 +40,7 @@ jobs:
         with:
           name: cloudsweep-report
           path: report.json
+          if-no-files-found: ignore
       - name: Open issue when findings exist
         if: always()
         env:

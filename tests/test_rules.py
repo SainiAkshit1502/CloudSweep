@@ -209,6 +209,146 @@ def test_open_sg_port_80_not_flagged(session):
     assert open_security_groups(session, REGION) == []
 
 
+def test_open_sg_duplicate_ipv4_rules_single_finding(session, monkeypatch):
+    fake_group = {
+        "GroupId": "sg-dup-ipv4",
+        "GroupName": "dup-ipv4-ssh",
+        "IpPermissions": [
+            {
+                "IpProtocol": "tcp",
+                "FromPort": 22,
+                "ToPort": 22,
+                "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
+            },
+            {
+                "IpProtocol": "tcp",
+                "FromPort": 22,
+                "ToPort": 22,
+                "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
+            },
+        ],
+    }
+    monkeypatch.setattr(
+        "scanner.rules._pages",
+        lambda _client, op, **_kwargs: (
+            [{"SecurityGroups": [fake_group]}] if op == "describe_security_groups" else []
+        ),
+    )
+    findings = open_security_groups(session, REGION)
+    sg_findings = [f for f in findings if f.resource_id == "sg-dup-ipv4"]
+    assert len(sg_findings) == 1
+    assert "port 22" in sg_findings[0].detail
+    assert "0.0.0.0/0" in sg_findings[0].detail
+
+
+def test_open_sg_ipv4_and_ipv6_mentions_both(session):
+    ec2 = session.client("ec2", region_name=REGION)
+    group_id = _create_sg(
+        ec2,
+        "dual-stack-ssh",
+        [
+            {
+                "IpProtocol": "tcp",
+                "FromPort": 22,
+                "ToPort": 22,
+                "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
+                "Ipv6Ranges": [{"CidrIpv6": "::/0"}],
+            }
+        ],
+    )
+    findings = open_security_groups(session, REGION)
+    sg_findings = [f for f in findings if f.resource_id == group_id]
+    assert len(sg_findings) == 1
+    assert "0.0.0.0/0 and ::/0" in sg_findings[0].detail
+    assert "port 22" in sg_findings[0].detail
+
+
+def test_open_sg_overlapping_ranges_single_finding(session):
+    ec2 = session.client("ec2", region_name=REGION)
+    group_id = _create_sg(
+        ec2,
+        "overlap-range-ssh",
+        [
+            {
+                "IpProtocol": "tcp",
+                "FromPort": 20,
+                "ToPort": 30,
+                "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
+            },
+            {
+                "IpProtocol": "tcp",
+                "FromPort": 22,
+                "ToPort": 22,
+                "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
+            },
+        ],
+    )
+    findings = open_security_groups(session, REGION)
+    sg_findings = [f for f in findings if f.resource_id == group_id]
+    assert len(sg_findings) == 1
+    assert "port 22" in sg_findings[0].detail
+
+
+def test_open_sg_ipv6_only_detail(session):
+    ec2 = session.client("ec2", region_name=REGION)
+    group_id = _create_sg(
+        ec2,
+        "ipv6-only-ssh",
+        [
+            {
+                "IpProtocol": "tcp",
+                "FromPort": 22,
+                "ToPort": 22,
+                "Ipv6Ranges": [{"CidrIpv6": "::/0"}],
+            }
+        ],
+    )
+    findings = open_security_groups(session, REGION)
+    sg_findings = [f for f in findings if f.resource_id == group_id]
+    assert len(sg_findings) == 1
+    assert "::/0" in sg_findings[0].detail
+    assert "0.0.0.0/0" not in sg_findings[0].detail
+
+
+def test_open_sg_protocol_all_traffic_single_finding(session):
+    ec2 = session.client("ec2", region_name=REGION)
+    group_id = _create_sg(
+        ec2,
+        "all-traffic-multi",
+        [
+            {"IpProtocol": "-1", "IpRanges": [{"CidrIp": "0.0.0.0/0"}]},
+            {"IpProtocol": "-1", "Ipv6Ranges": [{"CidrIpv6": "::/0"}]},
+        ],
+    )
+    findings = open_security_groups(session, REGION)
+    sg_findings = [f for f in findings if f.resource_id == group_id]
+    assert len(sg_findings) == 1
+    assert "all traffic" in sg_findings[0].detail
+    assert "0.0.0.0/0 and ::/0" in sg_findings[0].detail
+
+
+def test_open_sg_range_covering_both_sensitive_ports(session):
+    ec2 = session.client("ec2", region_name=REGION)
+    group_id = _create_sg(
+        ec2,
+        "wide-range",
+        [
+            {
+                "IpProtocol": "tcp",
+                "FromPort": 1,
+                "ToPort": 4000,
+                "IpRanges": [{"CidrIp": "0.0.0.0/0"}],
+            }
+        ],
+    )
+    findings = open_security_groups(session, REGION)
+    sg_findings = [f for f in findings if f.resource_id == group_id]
+    ports = {f.detail for f in sg_findings}
+    assert len(sg_findings) == 2
+    assert any("port 22" in d for d in ports)
+    assert any("port 3389" in d for d in ports)
+
+
 def test_missing_tags_volume(session):
     ec2 = session.client("ec2", region_name=REGION)
     volume_id = create_volume(ec2)

@@ -97,14 +97,15 @@ def idle_elastic_ips(session: boto3.Session, region: str) -> list[Finding]:
     return findings
 
 
-def _permission_is_world_open(permission: dict) -> bool:
+def _permission_world_sources(permission: dict) -> set[str]:
+    sources: set[str] = set()
     for ip_range in permission.get("IpRanges") or []:
         if ip_range.get("CidrIp") == WORLD_IPV4:
-            return True
+            sources.add(WORLD_IPV4)
     for ipv6_range in permission.get("Ipv6Ranges") or []:
         if ipv6_range.get("CidrIpv6") == WORLD_IPV6:
-            return True
-    return False
+            sources.add(WORLD_IPV6)
+    return sources
 
 
 def open_security_groups(session: boto3.Session, region: str) -> list[Finding]:
@@ -115,31 +116,21 @@ def open_security_groups(session: boto3.Session, region: str) -> list[Finding]:
     ec2 = session.client("ec2", region_name=region)
     findings: list[Finding] = []
     recommendation = "Restrict the source to a known IP range or use SSM Session Manager."
+    seen: set[tuple[str, int | str]] = set()
 
     for page in _pages(ec2, "describe_security_groups"):
         for group in page.get("SecurityGroups", []):
             group_id = group["GroupId"]
             group_name = group.get("GroupName", "")
+            exposed: dict[int | str, set[str]] = {}
+
             for permission in group.get("IpPermissions") or []:
-                if not _permission_is_world_open(permission):
+                sources = _permission_world_sources(permission)
+                if not sources:
                     continue
                 protocol = permission.get("IpProtocol", "")
                 if protocol == "-1":
-                    findings.append(
-                        Finding(
-                            rule="open_security_group",
-                            resource_type="security_group",
-                            resource_id=group_id,
-                            region=region,
-                            severity=Severity.HIGH,
-                            est_monthly_cost_usd=0.0,
-                            detail=(
-                                f"Security group {group_id} ({group_name}) allows "
-                                f"{WORLD_IPV4} on all traffic."
-                            ),
-                            recommendation=recommendation,
-                        )
-                    )
+                    exposed.setdefault("all traffic", set()).update(sources)
                     continue
                 if protocol != "tcp":
                     continue
@@ -149,21 +140,48 @@ def open_security_groups(session: boto3.Session, region: str) -> list[Finding]:
                     continue
                 for port in sorted(sensitive):
                     if from_port <= port <= to_port:
-                        findings.append(
-                            Finding(
-                                rule="open_security_group",
-                                resource_type="security_group",
-                                resource_id=group_id,
-                                region=region,
-                                severity=Severity.HIGH,
-                                est_monthly_cost_usd=0.0,
-                                detail=(
-                                    f"Security group {group_id} ({group_name}) allows "
-                                    f"{WORLD_IPV4} on port {port}."
-                                ),
-                                recommendation=recommendation,
-                            )
-                        )
+                        exposed.setdefault(port, set()).update(sources)
+
+            targets: list[int | str] = []
+            if "all traffic" in exposed:
+                targets.append("all traffic")
+            targets.extend(sorted(p for p in exposed if isinstance(p, int)))
+
+            for target in targets:
+                key = (group_id, target)
+                if key in seen:
+                    continue
+                seen.add(key)
+                sources = exposed[target]
+                if WORLD_IPV4 in sources and WORLD_IPV6 in sources:
+                    src_str = f"{WORLD_IPV4} and {WORLD_IPV6}"
+                elif WORLD_IPV4 in sources:
+                    src_str = WORLD_IPV4
+                else:
+                    src_str = WORLD_IPV6
+
+                if target == "all traffic":
+                    detail = (
+                        f"Security group {group_id} ({group_name}) allows {src_str} on all traffic."
+                    )
+                else:
+                    detail = (
+                        f"Security group {group_id} ({group_name}) allows "
+                        f"{src_str} on port {target}."
+                    )
+
+                findings.append(
+                    Finding(
+                        rule="open_security_group",
+                        resource_type="security_group",
+                        resource_id=group_id,
+                        region=region,
+                        severity=Severity.HIGH,
+                        est_monthly_cost_usd=0.0,
+                        detail=detail,
+                        recommendation=recommendation,
+                    )
+                )
     return findings
 
 

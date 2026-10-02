@@ -1,0 +1,19 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "CloudSweepReadOnly",
+      "Effect": "Allow",
+      "Action": [
+        "ec2:DescribeVolumes",
+        "ec2:DescribeAddresses",
+        "ec2:DescribeSecurityGroups",
+        "ec2:DescribeInstances",
+        "s3:ListAllMyBuckets",
+        "s3:GetBucketLocation",
+        "s3:GetBucketTagging"
+      ],
+      "Resource": "*"
+    }
+  ]
+}

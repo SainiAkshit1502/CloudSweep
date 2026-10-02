@@ -18,7 +18,19 @@ pip install -r requirements-dev.txt
 pytest
 ```
 
-Against a real account (after the IAM setup in `docs/runbook.md`):
+## Demo mode (no AWS account needed)
+
+Run CloudSweep with pre-seeded mock resources using moto without requiring real AWS credentials:
+
+```bash
+python -m scripts.demo_dashboard
+```
+
+Open http://localhost:8000 to view the dashboard pre-loaded with 5 demo findings.
+
+## Real AWS usage
+
+Against a real account (after the IAM setup in [docs/runbook.md](docs/runbook.md)):
 
 ```bash
 python -m sandbox.create_waste --profile cloudsweep-sandbox --yes
@@ -34,6 +46,21 @@ docker build -t cloudsweep .
 docker run --rm -p 8000:8000 -e AWS_ACCESS_KEY_ID -e AWS_SECRET_ACCESS_KEY -e AWS_REGION=ap-south-1 cloudsweep
 ```
 
+## Configuration
+
+Copy [.env.example](.env.example) to `.env`:
+
+```bash
+cp .env.example .env
+```
+
+Key environment variables:
+- `AWS_REGION`: Target AWS region (default: `ap-south-1`).
+- `CLOUDSWEEP_ALLOWED_ACCOUNT_ID`: 12-digit AWS account ID guard required by sandbox scripts.
+- `AWS_PROFILE`: Optional local AWS CLI profile name.
+- `REQUIRED_TAGS`: Comma-separated tag keys every resource should have (default: `owner,env`).
+- `SENSITIVE_PORTS`: Comma-separated ports monitored for open access (default: `22,3389`).
+
 ## Architecture
 
 ```mermaid
@@ -45,6 +72,11 @@ flowchart LR
   Sandbox[sandbox scripts] --> TaggedAWS[Tagged demo resources]
 ```
 
+## Dashboard
+
+Dashboard (demo data)
+![CloudSweep Dashboard](docs/images/dashboard.png)
+
 ## Docs
 
 - [Project spec](docs/PROJECT_SPEC.md)
@@ -52,11 +84,10 @@ flowchart LR
 - [Design](docs/design.md)
 - [Test plan](docs/test_plan.md)
 - [Runbook](docs/runbook.md)
+- [IAM policies](docs/iam/README.md)
 
 ## Safety
 
 - Scanner identity: read-only.
 - Sandbox identity: separate, and it will not run unless `CLOUDSWEEP_ALLOWED_ACCOUNT_ID` matches the caller.
 - Destroy only deletes resources tagged `sandbox=cloudsweep`.
-
-Dashboard screenshot: run the API locally and use **Run scan** after `create_waste`; you should see five findings and a non-zero estimated monthly savings figure.

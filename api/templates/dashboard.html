@@ -101,6 +101,27 @@
     .medium { background: #3a2e10; color: var(--medium); }
     .low { background: #163044; color: var(--low); }
     .error { color: var(--high); margin-top: 0.75rem; }
+    .banner-warning {
+      background: #3a2e10;
+      border: 1px solid var(--medium);
+      color: #ffe399;
+      border-radius: 8px;
+      padding: 0.9rem 1.2rem;
+      margin-bottom: 1.25rem;
+    }
+    .banner-warning strong {
+      display: block;
+      margin-bottom: 0.4rem;
+      font-size: 0.95rem;
+    }
+    .banner-warning ul {
+      margin: 0;
+      padding-left: 1.2rem;
+      font-size: 0.88rem;
+    }
+    .banner-warning li {
+      margin-top: 0.2rem;
+    }
     @media (max-width: 720px) {
       table, thead, tbody, th, td, tr { display: block; }
       th { display: none; }
@@ -117,21 +138,36 @@
         Region: {{ region }}
         {% if result %}
           · Account: {{ result.account_id }}
-          · Last scan: {{ result.finished_at }}
+          · Last scan: {{ result.finished_at | format_datetime }}
         {% endif %}
       </div>
     </div>
     <button id="run-scan" type="button">Run scan</button>
   </header>
   <main>
+    {% if result and result.errors %}
+      <div class="banner-warning" role="alert">
+        <strong>Some rules failed, results may be incomplete</strong>
+        <ul>
+          {% for err in result.errors %}
+            <li>{{ err }}</li>
+          {% endfor %}
+        </ul>
+      </div>
+    {% endif %}
     {% if not result %}
       <div class="empty">No scan yet. Click “Run scan” to check this account.</div>
-    {% elif result.summary.total_findings == 0 %}
+    {% elif result.summary.total_findings == 0 and not result.errors %}
       <div class="cards">
         <div class="card"><div class="label">Findings</div><div class="value">0</div></div>
         <div class="card"><div class="label">Est. monthly savings</div><div class="value">$0.00</div></div>
       </div>
       <div class="empty">No issues found.</div>
+    {% elif result.summary.total_findings == 0 and result.errors %}
+      <div class="cards">
+        <div class="card"><div class="label">Findings</div><div class="value">0</div></div>
+        <div class="card"><div class="label">Est. monthly savings</div><div class="value">$0.00</div></div>
+      </div>
     {% else %}
       <div class="cards">
         <div class="card"><div class="label">Total findings</div><div class="value">{{ result.summary.total_findings }}</div></div>
